@@ -93,11 +93,10 @@
     
     <div id="ui">
         <div>Score: <span id="score">0</span></div>
-        <div>High Score: <span id="highScore">0</span></div>
     </div>
 
     <div id="instructions">
-        Maus bewegen = Flugzeug steuern<br>
+        Pfeiltasten ↑↓ / Maus / Touch = Steuern<br>
         Sammle die Sterne ⭐<br>
         Weiche den Wolken aus ☁️
     </div>
@@ -105,7 +104,6 @@
     <div id="gameOver">
         <h1>CRASH!</h1>
         <p>Dein Score: <span id="finalScore">0</span></p>
-        <p>High Score: <span id="finalHighScore">0</span></p>
         <button onclick="restartGame()">Nochmal fliegen</button>
     </div>
 
@@ -127,12 +125,9 @@
             obstacles: [],
             stars: [],
             score: 0,
-            highScore: parseInt(localStorage.getItem('skyPilotHighScore')) || 0,
             gameOver: false,
             clouds: []
         };
-
-        document.getElementById('highScore').textContent = gameState.highScore;
 
         // Background clouds
         for (let i = 0; i < 8; i++) {
@@ -148,6 +143,33 @@
             if (!gameState.gameOver) {
                 gameState.plane.targetY = e.clientY;
             }
+        });
+
+        // Touch controls
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!gameState.gameOver) {
+                const touch = e.touches[0];
+                gameState.plane.targetY = touch.clientY;
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!gameState.gameOver) {
+                const touch = e.touches[0];
+                gameState.plane.targetY = touch.clientY;
+            }
+        });
+
+        // Keyboard controls
+        let keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
         });
 
         function drawPlane() {
@@ -180,12 +202,15 @@
         }
 
         function drawCloud(x, y, size, opacity = 1) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.fillStyle = `rgba(220, 220, 220, ${opacity})`;
+            ctx.strokeStyle = `rgba(180, 180, 180, ${opacity})`;
+            ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
             ctx.arc(x + size * 0.3, y - size * 0.2, size * 0.4, 0, Math.PI * 2);
             ctx.arc(x - size * 0.3, y - size * 0.1, size * 0.35, 0, Math.PI * 2);
             ctx.fill();
+            ctx.stroke();
         }
 
         function drawStar(x, y, size) {
@@ -245,14 +270,31 @@
             });
 
             // Update plane position
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                gameState.plane.targetY = Math.max(gameState.plane.height, gameState.plane.targetY - 8);
+            }
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                gameState.plane.targetY = Math.min(canvas.height - gameState.plane.height, gameState.plane.targetY + 8);
+            }
+            
             gameState.plane.y += (gameState.plane.targetY - gameState.plane.y) * 0.1;
 
             // Draw and update obstacles
             gameState.obstacles.forEach((obs, index) => {
-                drawCloud(obs.x, obs.y, obs.size, 0.8);
+                drawCloud(obs.x, obs.y, obs.size, 1);
                 obs.x -= obs.speed;
 
-                if (checkCollision(obs, gameState.plane)) {
+                // Better collision detection
+                const planeCenter = {
+                    x: gameState.plane.x + gameState.plane.width / 2,
+                    y: gameState.plane.y + gameState.plane.height / 2
+                };
+                const distance = Math.sqrt(
+                    Math.pow(planeCenter.x - obs.x, 2) + 
+                    Math.pow(planeCenter.y - obs.y, 2)
+                );
+
+                if (distance < obs.size * 0.4 + 20) {
                     endGame();
                 }
 
@@ -285,13 +327,6 @@
         function endGame() {
             gameState.gameOver = true;
             document.getElementById('finalScore').textContent = gameState.score;
-            
-            if (gameState.score > gameState.highScore) {
-                gameState.highScore = gameState.score;
-                localStorage.setItem('skyPilotHighScore', gameState.highScore);
-            }
-            
-            document.getElementById('finalHighScore').textContent = gameState.highScore;
             document.getElementById('gameOver').style.display = 'block';
         }
 
