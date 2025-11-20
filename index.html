@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Pilot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(to bottom, #1e3a8a 0%, #3b82f6 50%, #93c5fd 100%);
+        }
+
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #0c4a6e 0%, #0284c7 40%, #38bdf8 100%);
+            cursor: none;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-size: 20px;
+            z-index: 10;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            display: none;
+            z-index: 20;
+        }
+
+        #gameOver h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #ef4444;
+        }
+
+        #gameOver p {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+
+        #gameOver button {
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-size: 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        #gameOver button:hover {
+            background: #2563eb;
+            transform: scale(1.05);
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-size: 14px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>High Score: <span id="highScore">0</span></div>
+    </div>
+
+    <div id="instructions">
+        Maus bewegen = Flugzeug steuern<br>
+        Sammle die Sterne ⭐<br>
+        Weiche den Wolken aus ☁️
+    </div>
+
+    <div id="gameOver">
+        <h1>CRASH!</h1>
+        <p>Dein Score: <span id="finalScore">0</span></p>
+        <p>High Score: <span id="finalHighScore">0</span></p>
+        <button onclick="restartGame()">Nochmal fliegen</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameState = {
+            plane: {
+                x: 100,
+                y: canvas.height / 2,
+                width: 60,
+                height: 30,
+                targetY: canvas.height / 2
+            },
+            obstacles: [],
+            stars: [],
+            score: 0,
+            highScore: parseInt(localStorage.getItem('skyPilotHighScore')) || 0,
+            gameOver: false,
+            clouds: []
+        };
+
+        document.getElementById('highScore').textContent = gameState.highScore;
+
+        // Background clouds
+        for (let i = 0; i < 8; i++) {
+            gameState.clouds.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 60 + 40,
+                speed: Math.random() * 0.5 + 0.2
+            });
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameState.gameOver) {
+                gameState.plane.targetY = e.clientY;
+            }
+        });
+
+        function drawPlane() {
+            const p = gameState.plane;
+            
+            // Plane body
+            ctx.fillStyle = '#dc2626';
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x + p.width, p.y);
+            ctx.lineTo(p.x + p.width - 10, p.y + p.height/2);
+            ctx.lineTo(p.x + p.width, p.y + p.height);
+            ctx.lineTo(p.x, p.y + p.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // Wings
+            ctx.fillStyle = '#991b1b';
+            ctx.fillRect(p.x + 20, p.y - 10, 25, 10);
+            ctx.fillRect(p.x + 20, p.y + p.height, 25, 10);
+
+            // Window
+            ctx.fillStyle = '#60a5fa';
+            ctx.fillRect(p.x + 15, p.y + 8, 12, 14);
+
+            // Swiss cross (mini)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(p.x + 35, p.y + 12, 8, 2);
+            ctx.fillRect(p.x + 37, p.y + 10, 4, 6);
+        }
+
+        function drawCloud(x, y, size, opacity = 1) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.3, y - size * 0.2, size * 0.4, 0, Math.PI * 2);
+            ctx.arc(x - size * 0.3, y - size * 0.1, size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawStar(x, y, size) {
+            ctx.fillStyle = '#fbbf24';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+                const x1 = x + Math.cos(angle) * size;
+                const y1 = y + Math.sin(angle) * size;
+                i === 0 ? ctx.moveTo(x1, y1) : ctx.lineTo(x1, y1);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function spawnObstacle() {
+            gameState.obstacles.push({
+                x: canvas.width,
+                y: Math.random() * (canvas.height - 100) + 50,
+                size: Math.random() * 50 + 60,
+                speed: 3 + gameState.score * 0.01
+            });
+        }
+
+        function spawnStar() {
+            gameState.stars.push({
+                x: canvas.width,
+                y: Math.random() * (canvas.height - 100) + 50,
+                size: 15,
+                speed: 3 + gameState.score * 0.01
+            });
+        }
+
+        function checkCollision(obj, plane) {
+            return plane.x < obj.x + obj.size &&
+                   plane.x + plane.width > obj.x &&
+                   plane.y < obj.y + obj.size &&
+                   plane.y + plane.height > obj.y;
+        }
+
+        function gameLoop() {
+            if (gameState.gameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background clouds
+            gameState.clouds.forEach(cloud => {
+                drawCloud(cloud.x, cloud.y, cloud.size, 0.3);
+                cloud.x -= cloud.speed;
+                if (cloud.x < -cloud.size) {
+                    cloud.x = canvas.width + cloud.size;
+                    cloud.y = Math.random() * canvas.height;
+                }
+            });
+
+            // Update plane position
+            gameState.plane.y += (gameState.plane.targetY - gameState.plane.y) * 0.1;
+
+            // Draw and update obstacles
+            gameState.obstacles.forEach((obs, index) => {
+                drawCloud(obs.x, obs.y, obs.size, 0.8);
+                obs.x -= obs.speed;
+
+                if (checkCollision(obs, gameState.plane)) {
+                    endGame();
+                }
+
+                if (obs.x + obs.size < 0) {
+                    gameState.obstacles.splice(index, 1);
+                }
+            });
+
+            // Draw and update stars
+            gameState.stars.forEach((star, index) => {
+                drawStar(star.x, star.y, star.size);
+                star.x -= star.speed;
+
+                if (checkCollision(star, gameState.plane)) {
+                    gameState.score += 10;
+                    document.getElementById('score').textContent = gameState.score;
+                    gameState.stars.splice(index, 1);
+                }
+
+                if (star.x + star.size < 0) {
+                    gameState.stars.splice(index, 1);
+                }
+            });
+
+            drawPlane();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            gameState.gameOver = true;
+            document.getElementById('finalScore').textContent = gameState.score;
+            
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('skyPilotHighScore', gameState.highScore);
+            }
+            
+            document.getElementById('finalHighScore').textContent = gameState.highScore;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function restartGame() {
+            gameState.obstacles = [];
+            gameState.stars = [];
+            gameState.score = 0;
+            gameState.gameOver = false;
+            gameState.plane.y = canvas.height / 2;
+            gameState.plane.targetY = canvas.height / 2;
+            
+            document.getElementById('score').textContent = '0';
+            document.getElementById('gameOver').style.display = 'none';
+            
+            gameLoop();
+        }
+
+        // Spawn timers
+        setInterval(() => {
+            if (!gameState.gameOver && Math.random() > 0.3) {
+                spawnObstacle();
+            }
+        }, 1500);
+
+        setInterval(() => {
+            if (!gameState.gameOver && Math.random() > 0.5) {
+                spawnStar();
+            }
+        }, 2000);
+
+        gameLoop();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
